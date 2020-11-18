@@ -6,6 +6,7 @@
   --purple-light: #E3DCED;
   --purple-dark: #604987;
   --red: #DE7272;
+  --red-dark:  #E74C3C;
   --panel-width: 260px;
 }
 
@@ -41,9 +42,18 @@ strong {
   height: 100%;
 }
 
-path {
-  stroke: black;
+.preview-line {
   fill: transparent;
+  stroke: black;
+}
+
+.preview-line--pen-up {
+  stroke: rgba(0, 0, 0, 0.3); 
+  stroke-width: 0.5;
+}
+
+.preview-line--drawn {
+  stroke: var(--red-dark) !important;
 }
 
 .preview-area {
@@ -82,11 +92,19 @@ path {
   contain: strict;
 }
 
-.preview > svg:not(:first-child) {
+.preview-progress-indicator {
   position: absolute;
   transform: translateZ(0.001px);
   top: 0;
   left: 0;
+}
+
+.preview-svg-chunk {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 100%;
 }
 
 .dragover .drag-target {

@@ -443,24 +443,7 @@ function PlanPreview(
   }
 ) {
   const ps = state.planOptions.paperSize;
-  const memoizedPlanPreview = useMemo(() => {
-    if (plan) {
-      const lines = plan.motions.map((m) => {
-        if (m instanceof XYMotion) {
-          return m.blocks.map((b) => b.p1).concat([m.p2]);
-        } else { return []; }
-      }).filter((m) => m.length);
-      return <g transform={`scale(${1 / Device.Axidraw.stepsPerMm})`}>
-        {lines.map((line, i) =>
-          <path
-            key={i}
-            d={line.reduce((m, {x, y}, j) => m + `${j === 0 ? "M" : "L"}${x} ${y}`, "")}
-            style={i % 2 === 0 ? {stroke: "rgba(0, 0, 0, 0.3)", strokeWidth: 0.5} : { stroke: "rgba(0, 0, 0, 0.8)", strokeWidth: state.planOptions.penStrokeWidth * Device.Axidraw.stepsPerMm }}
-          />
-        )}
-      </g>;
-    }
-  }, [plan]);
+  const progress = state.progress;
 
   // w/h of svg.
   // first try scaling so that h = area.h. if w < area.w, then ok.
@@ -468,6 +451,84 @@ function PlanPreview(
   const {width, height} = ps.size.x / ps.size.y * previewSize.height <= previewSize.width
     ? {width: ps.size.x / ps.size.y * previewSize.height, height: previewSize.height}
     : {height: ps.size.y / ps.size.x * previewSize.width, width: previewSize.width};
+
+  const memoizedPlanPreview = useMemo(() => {
+    if (plan) {
+      const lines = plan.motions.map((m, i) => {
+        if (m instanceof XYMotion) {
+          const points = m.blocks.map((b) => b.p1).concat([m.p2]);
+          return {
+            points,
+            // Cache line index, as that index is used to compare against progress index
+            lineIndexInPlan: i,
+          };
+        } else { 
+          return { 
+            points: [],
+            lineIndexInPlan: i, 
+          };
+        };
+      }).filter((m) => m.points.length);
+      
+      const svgLines = lines.map((line, i) => {
+        const classNames = ['preview-line'];
+
+        const isPenUp = i % 2 === 0;
+
+        if (isPenUp) {
+          classNames.push('preview-line--pen-up');
+        } else {
+          classNames.push(`preview-line--${line.lineIndexInPlan}`);
+
+          if (progress >= line.lineIndexInPlan) {
+            classNames.push('preview-line--drawn');
+          }
+        }
+
+        return <path
+          key={i}
+          d={line.points.reduce((m, {x, y}, j) => m + `${j === 0 ? "M" : "L"}${x} ${y}`, "")}
+          style={i % 2 === 0 ? {stroke: "rgba(0, 0, 0, 0.3)", strokeWidth: 0.5} : { stroke: "rgba(0, 0, 0, 0.8)", strokeWidth: state.planOptions.penStrokeWidth * Device.Axidraw.stepsPerMm }}
+          className={classNames.join(' ')}
+        />;
+      });
+
+      const LINES_PER_SVG = 1000;
+      const lineGroups = [];
+      for (let i = 0, j = svgLines.length; i < j; i+=LINES_PER_SVG) {
+        lineGroups.push(svgLines.slice(i, i + LINES_PER_SVG));
+      }
+
+      return lineGroups.map((lineGroup, index) => {
+        return (
+          <svg
+            key={index}
+            width={width}
+            height={height}
+            viewBox={`0 0 ${ps.size.x} ${ps.size.y}`}
+            className='preview-svg-chunk'
+          >
+            <g transform={`scale(${1 / Device.Axidraw.stepsPerMm})`}>
+              {lineGroup}
+            </g>
+          </svg>
+        )
+      });
+    }
+  }, [plan]);
+
+  useEffect(() => {
+    if (progress === null) {
+      // Reset color of the previously drawn lines
+      document.querySelectorAll(".preview-line--drawn")
+        .forEach((path: SVGPathElement) => path.classList.remove("preview-line--drawn"));
+    } else  {
+      const line: SVGPathElement = document.querySelector(`.preview-line--${progress}`);
+      if (line) {
+        line.classList.add("preview-line--drawn");
+      }
+    }
+  }, [progress]);
 
   const [microprogress, setMicroprogress] = useState(0);
   useLayoutEffect(() => {
@@ -503,6 +564,7 @@ function PlanPreview(
     const posYMm = pos.y / stepsPerMm;
     progressIndicator =
       <svg
+        className='preview-progress-indicator'
         width={width * 2}
         height={height * 2}
         viewBox={`${-width} ${-height} ${width * 2} ${height * 2}`}
@@ -536,15 +598,16 @@ function PlanPreview(
       strokeDasharray="1,1"
     />
   </g>;
+
   return <div className="preview">
     <svg
       width={width}
       height={height}
       viewBox={`0 0 ${ps.size.x} ${ps.size.y}`}
     >
-      {memoizedPlanPreview}
       {margins}
     </svg>
+    {memoizedPlanPreview}
     {progressIndicator}
   </div>;
 }
